@@ -181,4 +181,4 @@ for chunk_id in range(num_chunks):
 
 torch.save([m.state_dict() for m in models], MODEL_OUT)
 
-print(f"\n✅ Training complete. Models saved to {MODEL_OUT}")
+print(f"\nTraining complete. Models saved to {MODEL_OUT}")

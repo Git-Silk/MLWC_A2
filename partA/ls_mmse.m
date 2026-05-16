@@ -1,6 +1,7 @@
 clc; clear; close all;
 rng(41)
 
+%Parameters
 N = 64;
 cp_len = 16;
 num_symbols = 2;
@@ -9,6 +10,7 @@ snr_list = 0:5:25;
 num_test = 5000;
 num_channels = 500;
 
+%Generate pilots and keep them same for all blocks
 pilot_bits_64 = randi([0 1], 2*N, 1);
 Xp_64 = (2*pilot_bits_64(1:N)-1) + 1j*(2*pilot_bits_64(N+1:end)-1);
 Xp_64 = Xp_64 / sqrt(2);
@@ -20,6 +22,7 @@ Xp_temp = (2*pilot_bits_8(1:length(pilot_idx_8))-1) + 1j*(2*pilot_bits_8(length(
 Xp_temp = Xp_temp / sqrt(2);
 Xp_8(pilot_idx_8) = Xp_temp;
 
+%WINNER - II Channel Modeling
 cfg = winner2.wimparset;
 cfg.CenterFrequency = 2.6e9;
 
@@ -52,7 +55,7 @@ for i = 1:num_channels
 
     for k = 1:length(h_full)
         d = delay_samples(k);
-        if d <= 16
+        if d <= 16 % CP is 16 so delay spread should not exceed that
             h(d+1) = h(d+1) + h_full(k);
         end
     end
@@ -61,7 +64,6 @@ for i = 1:num_channels
 end
 
 R_HH = (H_samples*H_samples')/num_channels;
-R_HH = R_HH / trace(R_HH) * N;
 
 [BER_LS_64, BER_MMSE_64, X_test_64, Y_test_64] = simulate_OFDM(Xp_64, [], true, snr_list, num_test, N, cp_len, num_channels,H_bank, delay_bank, cfg, R_HH);
 
