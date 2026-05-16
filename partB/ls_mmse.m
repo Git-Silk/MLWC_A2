@@ -1,5 +1,3 @@
-%  PART B  –  TASK 2  (with test data export)
-
 clear; clc; close all;
 rng(42);
 
@@ -15,58 +13,35 @@ CP     = 16;
 bps    = 2;                 % QPSK: 2 bits/symbol
 L_eff  = CP;                % Effective CIR taps = 16
 
-%  Monte Carlo / test settings
 SNR_dB = 0:2:30;
 n_SNR  = length(SNR_dB);
 Nmc    = 500;               % Trials per SNR point
-%  Total test samples = Nmc x n_SNR
 N_test_total = Nmc * n_SNR;
 
-fprintf('SNR range   : %d to %d dB  (%d points)\n', SNR_dB(1), SNR_dB(end), n_SNR);
-fprintf('Trials/SNR  : %d\n', Nmc);
-fprintf('Total test samples to save: %d\n\n', N_test_total);
-
-
-%  POWER DELAY PROFILE  (Exponential, normalised)
 pwr_dly = exp(-(0:L_eff-1)' / L_eff);
 pwr_dly = pwr_dly / sum(pwr_dly);
 
-
-%  FIXED PILOT SEQUENCE  (unit power on all subcarriers)
 X_pilot = ones(Np, 1);
 
-
-%  PRECOMPUTE MMSE AUTOCORRELATION MATRIX  R_HH
-fprintf('Precomputing R_HH (%dx%d) ... ', Nsub, Nsub);
 r_col   = fft([pwr_dly; zeros(Nsub-L_eff, 1)], Nsub);
 [J, I]  = meshgrid(1:Nsub, 1:Nsub);
 idx_mat = mod(I-J, Nsub) + 1;
 R_HH    = r_col(idx_mat);
-R_HH    = (R_HH + R_HH') / 2;         % Enforce Hermitian symmetry
+R_HH    = (R_HH + R_HH') / 2;         
 fprintf('Done.\n\n');
 
-
-%  PRE-ALLOCATE
 SER_LS   = zeros(n_SNR, 1);
 SER_MMSE = zeros(n_SNR, 1);
-
 
 X_test     = zeros(256, N_test_total, 'single');
 Y_test     = zeros(128, N_test_total, 'single');
 SNR_labels = zeros(1,   N_test_total, 'single');
-
-
-%  MAIN LOOP  –  SNR SWEEP
-fprintf('Running simulation  (%d trials x %d SNR points) ...\n', Nmc, n_SNR);
-fprintf('%-10s  %-14s  %-14s\n', 'SNR(dB)', 'SER LS', 'SER MMSE');
-fprintf('%s\n', repmat('-', 1, 42));
 
 for si = 1:n_SNR
 
     SNR    = 10^(SNR_dB(si) / 10);
     sigma2 = 1 / SNR;
 
-    % MMSE weight matrix: W = R_HH * (R_HH + sigma2*I)^{-1}
     W_MMSE = R_HH / (R_HH + sigma2 * eye(Nsub));
 
     err_LS   = 0;
@@ -77,35 +52,28 @@ for si = 1:n_SNR
 
     for mc = 1:Nmc
 
-        %  1.  CHANNEL REALISATION
         h_cir  = sqrt(pwr_dly/2) .* (randn(L_eff,1) + 1j*randn(L_eff,1));
         H_freq = fft([h_cir; zeros(Nsub-L_eff,1)], Nsub);   % (64x1)
 
-        %  2.  PILOT BLOCK  –  received signal
         n_pilot = sqrt(sigma2/2) * (randn(Nsub,1) + 1j*randn(Nsub,1));
         Y_pilot = H_freq .* X_pilot + n_pilot;
 
-        % LS: H_LS = Y_p / X_p  (X_p=1, so H_LS = Y_pilot directly)
         H_LS       = Y_pilot ./ X_pilot;
 
-        % MMSE: exploits cross-subcarrier correlation via R_HH
         H_MMSE_est = W_MMSE * H_LS;
 
-        %  3.  DATA BLOCK  –  random QPSK symbols
         bits_tx = randi([0 1], Nsub*bps, 1);                % 128 bits
         sym_tx  = qpsk_mod(bits_tx);                         % (64x1)
 
         n_data = sqrt(sigma2/2) * (randn(Nsub,1) + 1j*randn(Nsub,1));
         Y_data = H_freq .* sym_tx + n_data;                  % (64x1)
 
-        %  4.  ZF EQUALIZATION + DETECTION
         sym_LS    = Y_data ./ H_LS;
         bits_LS   = qpsk_demod(sym_LS);
 
         sym_MMSE  = Y_data ./ H_MMSE_est;
         bits_MMSE = qpsk_demod(sym_MMSE);
 
-        %  5.  SER COUNTING
         ref_m  = reshape(bits_tx,   bps, []);   % (2 x 64)
         ls_m   = reshape(bits_LS,   bps, []);
         mmse_m = reshape(bits_MMSE, bps, []);
@@ -114,24 +82,22 @@ for si = 1:n_SNR
         err_MMSE = err_MMSE + sum(any(ref_m ~= mmse_m, 1));
         total    = total + Nsub;
 
-        %  6.  STORE TEST SAMPLE FOR DNN
         col = col_offset + mc;
         X_test(:, col) = single([ real(Y_pilot); imag(Y_pilot); ...
                                    real(Y_data);  imag(Y_data)  ]);
         Y_test(:, col) = single(bits_tx);
-        SNR_labels(col) = single(si);      % Python uses this to group per SNR
+        SNR_labels(col) = single(si);     
 
-    end  % Monte Carlo trials
+    end  
 
     SER_LS(si)   = err_LS   / total;
     SER_MMSE(si) = err_MMSE / total;
     fprintf('  %5d dB    %12.6f    %12.6f\n', SNR_dB(si), SER_LS(si), SER_MMSE(si));
 
-end  % SNR loop
+end
 
-SNR_dB_vec = single(SNR_dB);       % 1 x n_SNR, Python reads SNR axis from this
+SNR_dB_vec = single(SNR_dB);      
 
-fprintf('\nSaving → test_data_ris.mat ... ');
 save('test_data_ris.mat', ...
      'X_test',     ...   % (256  x N_test_total)
      'Y_test',     ...   % (128  x N_test_total)

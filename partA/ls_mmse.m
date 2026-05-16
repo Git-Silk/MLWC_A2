@@ -133,15 +133,14 @@ for s = 1:length(snr_list)
         Xd = (2*bits(1:N)-1) + 1j*(2*bits(N+1:end)-1);
         Xd = Xd/sqrt(2);
 
-        if isempty(pilot_idx)
+        if isempty(pilot_idx) %64 Pilot
             X = [Xp, Xd];
-        else
+        else % 8 Pilot
             Xp_full = zeros(N,1);
             Xp_full(pilot_idx) = Xp(pilot_idx);
             Xd(pilot_idx) = 0;
             X = [Xp_full + Xd, Xd];
         end
-
         
         x_time = ifft(X,N);
 
@@ -152,7 +151,6 @@ for s = 1:length(snr_list)
         end
 
         x_serial = x_cp(:);
-
        
         idx = randi(num_channels);
         H = H_bank{idx}; delays = delay_bank{idx};
@@ -171,7 +169,6 @@ for s = 1:length(snr_list)
         y = conv(x_serial,h);
         y = y(1:length(x_serial));
 
-        
         signal_power = mean(abs(y).^2);
         noise_var = signal_power / (10^(snr_dB/10));
         noise = sqrt(noise_var/2)*(randn(size(y)) + 1j*randn(size(y)));

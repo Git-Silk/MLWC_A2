@@ -1,11 +1,9 @@
-%  PART B  –  TASK 1
-
 clear; clc; close all;
 rng(42);                    % Fix seed – reproducibility
 
 %  SYSTEM PARAMETERS
 M      = 4;                 % Number of BS antennas (ULA)
-Nx     = 16;  Ny = 16;     % RIS elements: horizontal x vertical
+Nx     = 16;  Ny = 16;      % RIS elements: horizontal x vertical
 N      = Nx * Ny;           % Total RIS elements = 256
 K      = 1;                 % Number of users (single user)
 Nsub   = 64;                % OFDM subcarriers
@@ -19,12 +17,9 @@ bps    = 2;                 % Bits per symbol (QPSK)
 L_eff  = min(L, CP);        % Effective CIR taps kept within CP = 16
 
 
-%  STEP 1: RIS PHASE SHIFT MATRIX  Φ
 omega = 2*pi * rand(N, 1);          % Random phase for each RIS element
 Phi   = diag(exp(1j * omega));      % Diagonal phase shift matrix (N×N)
 
-
-%  STEP 2: mmWAVE CHANNEL GENERATION – Saleh-Valenzuela Model
 H1 = zeros(N, M);
 for l = 1:L_eff
     alpha1    = (randn + 1j*randn) / sqrt(2);    % Complex path gain
@@ -47,55 +42,37 @@ for l = 1:L_eff
 end
 H2 = sqrt(N / L_eff) * H2;
 
-fprintf('         H1 (BS→RIS)  : [%d × %d]  ||H1||_F = %.3f\n', size(H1,1), size(H1,2), norm(H1,'fro'));
-fprintf('         H2 (RIS→UE)  : [%d × %d]  ||H2||   = %.3f\n\n', size(H2,1), size(H2,2), norm(H2));
-
-
-%  STEP 3: EFFECTIVE CASCADED CHANNEL
 Heff = H2 * Phi * H1;           % Effective cascaded channel (1×M)
 disp(Heff);
 
-%  Maximum Ratio Transmission (MRT) precoder: p = Heff^H / ||Heff||
 p     = Heff' / norm(Heff);     % (M×1) normalised precoder
 g_eff = Heff * p;               % Effective scalar channel (complex)
 
 
-%  STEP 4: FREQUENCY-SELECTIVE CASCADED CHANNEL  (L_eff-tap CIR)
 pwr_dly = exp(-(0:L_eff-1)' / L_eff);   % Exponential PDP
 pwr_dly = pwr_dly / sum(pwr_dly);        % Normalize  Σ p_l = 1
 
-%  Tap coefficients: complex Gaussian with the given PDP, scaled by |g_eff|
 h_cir  = (abs(g_eff)) * sqrt(pwr_dly / 2) .* ...
           (randn(L_eff, 1) + 1j*randn(L_eff, 1));
 
-%  Frequency-domain channel via Nsub-point FFT (zero-padded CIR)
 H_freq = fft([h_cir; zeros(Nsub - L_eff, 1)], Nsub);   % (Nsub × 1)
-
-%  STEP 5: OFDM TRANSMITTER – RECEIVER CHAIN (single frame test)
 
 SNR_test_dB = 20;
 sigma2      = 10^(-SNR_test_dB / 10);   % Noise variance (signal power = 1)
 
-%  TRANSMITTER 
 bits_tx = randi([0 1], Nsub * bps, 1); % Random information bits
 sym_tx  = qpsk_mod(bits_tx);           % QPSK symbols         (Nsub × 1)
 tx_td   = ifft(sym_tx, Nsub);          % IDFT → time domain
 tx_cp   = [tx_td(end-CP+1:end); tx_td];% Insert cyclic prefix (Nsub+CP)
 
-%  CHANNEL
 noise_d = sqrt(sigma2/2) * (randn(Nsub,1) + 1j*randn(Nsub,1));
 Y_rx    = H_freq .* sym_tx + noise_d;  % Received signal (freq domain)
 
-%  RECEIVER
 sym_eq  = Y_rx ./ H_freq;              % ZF equalizer
 bits_rx = qpsk_demod(sym_eq);          % Hard-decision demodulation
 
-%  Performance metrics
 BER = mean(bits_tx ~= bits_rx);
 SER = mean(any(reshape(bits_tx ~= bits_rx, bps, []), 1));
-
-
-%  FIGURE 1: Channel Impulse & Frequency Responses
 
 figure('Name','Task 1 – Channel Response','Position',[80 80 950 380]);
 
@@ -121,13 +98,11 @@ sgtitle('RIS-Assisted MU-MISO — mmWave Cascaded Channel', ...
 % LOCAL FUNCTIONS
 
 function a = ula_response(M, phi, d, lambda)
-% ULA (Uniform Linear Array) response vector  [M × 1]
     idx = (0:M-1)';
     a   = (1/sqrt(M)) * exp(1j * 2*pi * (d/lambda) * idx * sin(phi));
 end
 
 function a = upa_response(Nx, Ny, phi, theta, d, lambda)
-% UPA (Uniform Planar Array) response vector  [Nx*Ny × 1]
     a   = zeros(Nx*Ny, 1);
     idx = 1;
     for beta = 0:Ny-1
@@ -141,7 +116,6 @@ function a = upa_response(Nx, Ny, phi, theta, d, lambda)
 end
 
 function sym = qpsk_mod(bits)
-% QPSK modulation:  2 bits  →  1 complex symbol  (Gray-coded)
     bits = reshape(bits, 2, []);
     I    = 1 - 2*bits(1,:);        % bit=0 → +1,  bit=1 → -1
     Q    = 1 - 2*bits(2,:);
@@ -149,7 +123,6 @@ function sym = qpsk_mod(bits)
 end
 
 function bits = qpsk_demod(sym)
-% QPSK hard-decision demodulation
     sym  = sym(:) * sqrt(2);
     b1   = double(real(sym) < 0);  % I-branch decision
     b2   = double(imag(sym) < 0);  % Q-branch decision
